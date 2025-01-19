@@ -1,4 +1,3 @@
-// Decaying Burgers
 #include <iostream>
 #include <vector>
 #include <cmath>
