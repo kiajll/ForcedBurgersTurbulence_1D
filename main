@@ -1,0 +1,131 @@
+// Decaying Burgers
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <complex>
+#include <fftw3.h> // FFTW for Fourier Transforms
+#include <fstream> // fstream for generating CSV output file
+#include <chrono>  // chrono for calculating elapsed time
+
+using namespace std;
+using namespace chrono;
+using Complex = complex<double>;
+
+//################### 00. Function Prototype Declarations ####################
+    // 00.01 forcing function: F = compute_forcing()
+    
+    
+    // 00.02 rhs function: du_hat_dt = compute_rhs(nu,Lx,k,u_hat)
+
+int main(){
+    // 01.01.Parameters
+    const double Lx{2.0*M_PI};         // Length of periodic domain
+    const size_t N = pow(2,5);            // Number of spatial grid points, degree of freedom
+    const double nu{0.001};             // Kinematic viscosity
+    const double tf = 1;             // Final time
+    const double dt = 1e-5;            // Time step
+    const size_t Nt = static_cast<size_t>(round(tf / dt)); // Number of time steps
+
+    // 01.02. Spatial grid
+    vector <double> x (N,0);
+    for(int i{0} ; i<N ; ++i)  x[i] = i*(Lx/N);     // i=0:N-1; (N-1 points + zero), where N's point is @ x[N-1]
+                                                    // Lx divided to N-1 portion with N points
+    // 01.03. Initial velocity field: u(x,0)= -U0 * sin(kx)
+    const int n{1};                       // Mode of initial wavenumber
+    const double k = (n* 2 * M_PI / Lx);  // Wave number of initial velocity field
+    const double U0{1.0};                 // Amplitude of the initial velocity field
+    vector <double> u (N,0);
+    for(size_t i{0} ; i < N ; ++i)  u[i] = -U0 * sin(k * x[i]);
+    u[N-1] = u[0];                        // Enforcing initial periodic condition
+    
+    // 01.04. generating CSV file of initial velocity field
+    ofstream outFile1("C:/Users/kiara/CppWorkspaces/Workspace002/Burgers_Forced/velocity_field_Initial.csv");  //ofstream is a class from <fstream> library
+    // Write header
+    outFile1 << "x,velocity\n";
+    if (!outFile1) {
+        cerr << "Error: Could not open initial data file for writing!" << endl;
+        return -1;
+    }
+    // Write data
+    for (size_t i{0}; i < N; ++i) outFile1 << x[i] << "," << u[i] << "\n";
+    outFile1.close();
+    
+    // 01.05. Wave numbers
+    vector<double> kx(N / 2 + 1);
+    for (int i = 0; i <= N / 2; ++i) kx[i] = 2 * M_PI * i / Lx;
+    
+    // 01.06. Forcing term
+    
+//################### 02. Initialize FFTW PLAN ####################
+
+
+    // 02.01. Declare pointers for Fourier coefficients 
+    fftw_complex *u_hat;
+    fftw_complex *du_hat_dt;
+
+    // 02.02 Allocate memory for Fourier coefficients
+    size_t fft_size = sizeof(fftw_complex) * N;
+    u_hat = (fftw_complex*) fftw_malloc(fft_size);    // u_hat is a pointer of the type fftw_complex
+    du_hat_dt = (fftw_complex*) fftw_malloc(fft_size); // this allocated memory is just accessable through the pointer, not any variable 
+
+    // 02.03 Create FFTW plans
+    fftw_plan forward = fftw_plan_dft_r2c_1d(N, u.data(), u_hat, FFTW_ESTIMATE);
+    fftw_plan backward = fftw_plan_dft_c2r_1d(N, u_hat, u.data(), FFTW_ESTIMATE);
+    
+    // 02.04 Fourier transform
+    fftw_execute(forward);
+    
+//################### 03. Processing Stage ####################    
+    // 09. Main time-stepping loop
+for(size_t t_cuntr{0} ; t_count < Nt ; ++t_count){
+    
+    memcpy(u1, u, u.size());
+    compute_rhs(nu, Lx, kx, u,R1);
+    
+}
+    return 0;
+}
+
+//################### 04. Function Definitions #################### 
+    
+    // forcing function: F = compute_forcing()
+    
+    
+//// rhs function: du_hat_dt = compute_rhs(nu,Lx,k,u_hat)
+    void compute_rhs( double nu, double Lx, const vector <double> &kx,vector <double> &u, vector<complex<double>> &du_hat_dt){
+    int N = kx.size();
+ 
+    /// Diffusion term: (d²u/dx²)
+        fftw_complex *ddu_hat_ddx = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * N);
+        vector<double> ddu_ddx(N);
+        // Create IFFT plan for diffusion term (d²u/dx²)
+        fftw_plan ifft_plan_diffusion = fftw_plan_dft_c2r_1d(N, ddu_hat_ddx, ddu_ddx.data(), FFTW_ESTIMATE);
+        // Compute second derivative in Fourier space (k^2 * u_hat)
+        for (size_t i{0}; i < N; ++i) {
+        complex<double> ddu_hat_ddx = pow(kx[i],2) * complex<double>(u_hat[i][0], u_hat[i][1]);
+        }
+        // Execute inverse FFT for diffusion term (d²u/dx²)
+        fftw_execute(ifft_plan_diffusion);
+        // Normalize the IFFT results
+        for (int i = 0; i < N; ++i) {
+            ddu_ddx[i] /= N;
+        }
+
+    /// Nonlinear-advection term: (u.(du/dx))
+        fftw_complex *nonlinear_advection_hat = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * N);
+        vector<double> nonlinear_advection(N);
+        // Create IFFT plan nonlinear-advection term (u.(du/dx))
+        fftw_plan ifft_plan_nonlinear_advection = fftw_plan_dft_c2r_1d(N, nonlinear_advection_hat, nonlinear_advection.data(), FFTW_ESTIMATE);
+        // Compute nonlinear-advection term using AntiAlias function
+        complex<double> Nonlinear_advection = compute_AntiAlias( Lx, complex<double>(u_hat[i][0],u_hat[i][1]));
+        // Execute inverse FFT for nonlinear-advection term (u.(du/dx))
+        fftw_execute(ifft_plan_nonlinear_advection);
+        // Normalize the IFFT results
+        for (int i = 0; i < N; ++i) {
+            nonlinear_advection[i] /= N;
+        }
+        
+    /// Total RHS term
+        du_hat_dt[i] = Nonlinear_advection - nu*ddu_ddx;
+    
+}
