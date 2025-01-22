@@ -181,57 +181,61 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
     fftw_free(nonlinear_advection_hat);
 }
 
-    // Anti Aliasing: compute_AntiAlias(u_hat,Lx)     
-    vector<Complex> AntiAlias_ZeroPadding(double Lx, const vector<Complex> &u_hat) {
+//// Anti Aliasing: compute_AntiAlias(u_hat,Lx)     
+    void AntiAlias_ZeroPadding(vector<fftw_complex>& u_hat, double Lx) {
     int N = u_hat.size();
     int M = (3 * N) / 2; // 3/2 Rule
 
     // Step 1: Zero-padding in Fourier space
-    vector<Complex> u_hat_pad(M, {0.0, 0.0});
+    vector<fftw_complex> u_hat_pad(M, {0.0, 0.0});
     for (int i = 0; i < N / 2; ++i) {
-        u_hat_pad[i] = u_hat[i];
-        u_hat_pad[M - (N / 2) + i] = u_hat[N / 2 + i];  // High-frequency components
+        u_hat_pad[i][0] = u_hat[i][0];   
+        u_hat_pad[i][1] = u_hat[i][1];   
+        u_hat_pad[M - (N / 2) + i][0] = u_hat[N / 2 + i][0];  
+        u_hat_pad[M - (N / 2) + i][1] = u_hat[N / 2 + i][1];
     }
 
     // Step 2: Perform IFFT to go to physical space
     vector<fftw_complex> w_pad(M);
-
-    // Perform IFFT without `reinterpret_cast`
     fftw_plan ifft_plan = fftw_plan_dft_1d(M, u_hat_pad.data(), w_pad.data(), FFTW_BACKWARD, FFTW_ESTIMATE);
-
     fftw_execute(ifft_plan);
     fftw_destroy_plan(ifft_plan);
 
     // Normalize IFFT
-    for (auto &val : w_pad) val /= M;
-    
-    // Step 3: Compute wave numbers in extended space
-    vector <double> k_extended(M);
-    for (int i = 0; i < M; ++i) kx[i] = (i < M / 2) ? i * 2.0 * M_PI / Lx : (i - M) * 2.0 * M_PI / Lx;
-    
-    // Step 4: Compute derivative (du/dx) in Fourier space (directly from `u_hat_pad`)
-    vector<Complex> du_dx_extended(M);
     for (int i = 0; i < M; ++i) {
-        du_dx_extended[i] = Complex(0, 1) * k_extended[i] * u_hat_pad[i];  // 🔴 Using `u_hat_pad`, no extra FFT needed!
+        w_pad[i][0] /= M;
+        w_pad[i][1] /= M;
+    }
+
+    // Step 3: Compute wave numbers in extended space
+    vector<double> k_extended(M);
+    for (int i = 0; i < M; ++i) 
+        k_extended[i] = (i < M / 2) ? i * 2.0 * M_PI / Lx : (i - M) * 2.0 * M_PI / Lx;
+
+    // Step 4: Compute derivative (du/dx) in Fourier space
+    vector<fftw_complex> du_dx_extended(M);
+    for (int i = 0; i < M; ++i) {
+        du_dx_extended[i][0] = -k_extended[i] * w_pad[i][1];  
+        du_dx_extended[i][1] = k_extended[i] * w_pad[i][0];   
     }
 
     // Step 5: Compute nonlinear term (-u * du/dx) in physical space
-    vector<Complex> nonlinear_term_extended(M);
+    vector<fftw_complex> nonlinear_term_extended(M);
     for (int i = 0; i < M; ++i) {
-        nonlinear_term_extended[i] = -w_pad[i] * du_dx_extended[i];
+        nonlinear_term_extended[i][0] = -w_pad[i][0] * du_dx_extended[i][0];  
+        nonlinear_term_extended[i][1] = -w_pad[i][1] * du_dx_extended[i][1];  
     }
 
     // Step 6: Transform back to Fourier space
-    fftw_plan fft_plan = fftw_plan_dft_1d(M,nonlinear_term_extended.data(), nonlinear_term_extended.data(),FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_plan fft_plan = fftw_plan_dft_1d(M, nonlinear_term_extended.data(), nonlinear_term_extended.data(), FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(fft_plan);
     fftw_destroy_plan(fft_plan);
 
-    // Step 7: Project back to original grid (remove padding)
-    vector<Complex> nonlinear_term_hat(N);
+    // Step 7: Modify `u_hat` directly (Project back to original grid)
     for (int i = 0; i < N / 2; ++i) {
-        nonlinear_term_hat[i] = (3.0 / 2.0) * nonlinear_term_extended[i];
-        nonlinear_term_hat[N / 2 + i] = (3.0 / 2.0) * nonlinear_term_extended[M - (N / 2) + i];
+        u_hat[i][0] = (3.0 / 2.0) * nonlinear_term_extended[i][0];
+        u_hat[i][1] = (3.0 / 2.0) * nonlinear_term_extended[i][1];
+        u_hat[N / 2 + i][0] = (3.0 / 2.0) * nonlinear_term_extended[M - (N / 2) + i][0];
+        u_hat[N / 2 + i][1] = (3.0 / 2.0) * nonlinear_term_extended[M - (N / 2) + i][1];
     }
-
-    return nonlinear_term_hat;
 }
