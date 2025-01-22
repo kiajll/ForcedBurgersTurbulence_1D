@@ -182,7 +182,7 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
 }
 
 //// Anti Aliasing: compute_AntiAlias(u_hat,Lx)     
-    void AntiAlias_ZeroPadding(vector<fftw_complex>& u_hat, double Lx) {
+    void AntiAlias_ZeroPadding(double Lx, vector<fftw_complex>& u_hat) {
     int N = u_hat.size();
     int M = (3 * N) / 2; // 3/2 Rule
 
