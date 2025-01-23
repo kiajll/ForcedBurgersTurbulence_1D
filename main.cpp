@@ -1,3 +1,5 @@
+// Decaying Burgers
+#define _USE_MATH_DEFINES  
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -6,26 +8,28 @@
 #include <fftw3.h> // FFTW for Fourier Transforms
 #include <fstream> // fstream for generating CSV output file
 #include <chrono>  // chrono for calculating elapsed time
+#include <filesystem>
 
 using namespace std;
 using namespace chrono;
 using Complex = complex<double>;
+using namespace std::filesystem;
 
 //################### 00. Function Prototype Declarations ####################
     // 00.01 forcing function: F = compute_forcing()
     
-void compute_AntiAlias( double Lx, const fftw_complex *u_hat);
+void AntiAlias_ZeroPadding( double Lx, fftw_complex *u_hat, int N);
     
     // 00.02 rhs function: du_hat_dt = compute_rhs(nu,Lx,k,u_hat)
-void compute_rhs( double nu, double Lx, const vector <double> &kx, const fftw_complex *u_hat, vector<double> &du_hat_dt);
+void compute_rhs( double nu, double Lx, const vector <double> &kx, fftw_complex *u_hat, vector<double> &du_hat_dt);
 
 int main(){
     // 01.01.Parameters
     const double Lx{2.0*M_PI};         // Length of periodic domain
-    const int N = pow(2,5);            // Number of spatial grid points, degree of freedom
+    const int N = pow(2,8);            // Number of spatial grid points, degree of freedom
     const double nu{0.001};            // Kinematic viscosity
-    const double tf = 1;               // Final time
-    const double dt = 1e-5;            // Time step
+    const double tf = 0.01;               // Final time
+    const double dt = 1e-4;            // Time step
     const size_t Nt = static_cast<size_t>(round(tf / dt)); // Number of time steps
 
     // 01.02. Spatial grid
@@ -44,16 +48,29 @@ int main(){
     u[N-1] = u[0];
     
     // 01.04. generating CSV file of initial velocity field
-    ofstream outFile1("C:/Users/kiara/CppWorkspaces/Workspace002/Burgers_Forced/velocity_field_Initial.csv");  //ofstream is a class from <fstream> library
-    // Write header
-    outFile1 << "x,velocity\n";
+    cout << "Current working directory: " << filesystem::current_path() << endl;
+    
+    string filename = "velocity_field_Initial.csv";
+    cout << "Attempting to create file: " << filename << endl;
+    
+    ofstream outFile1(filename);
     if (!outFile1) {
         cerr << "Error: Could not open initial data file for writing!" << endl;
         return -1;
     }
+    
+    cout << "File opened successfully" << endl;
+    
+    // Write header
+    outFile1 << "x,velocity\n";
+    
     // Write data
-    for (int i{0}; i < N; ++i) outFile1 << x[i] << "," << u[i] << "\n";
+    for (int i{0}; i < N; ++i) {
+        outFile1 << x[i] << "," << u[i] << "\n";
+    }
+    
     outFile1.close();
+    cout << "File written and closed successfully" << endl;
     
     // 01.05. Wave numbers
     vector <double> kx (N);
@@ -125,6 +142,29 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
     fftw_destroy_plan(forward);
     //fftw_destroy_plan(backward);
     fftw_free(u_hat);
+    // 03.07.01. Output results
+cout << "\n ## Final results ## " << endl;
+for (int i = 0; i < N; ++i) {
+    cout << "x = " << x[i] << ", u = " << u[i] << endl;
+}
+    
+// 03.07.02. Write data to a CSV file
+   ofstream outFile2("burgers_velocity_field_final.csv");  //ofstream is a class from <fstream> library
+    if (!outFile2) {
+        cerr << "Error: Could not open file for writing!" << endl;
+        return -1;
+    }
+
+    // Write header
+    outFile2 << "x,velocity\n";
+
+    // Write data
+    for (int i = 0; i < N; ++i) {
+        outFile2 << x[i] << "," << u[i] << "\n";
+    }
+
+    outFile2.close();
+    cout << "\nFile 'burgers_velocity_field_final.csv' written successfully!" << endl;
     
     return 0;
 }
@@ -135,7 +175,7 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
     
     
 //// rhs function: du_hat_dt = compute_rhs(nu,Lx,k,u_hat)
-    void compute_rhs( double nu, double Lx, const vector <double> &kx, const fftw_complex *u_hat, vector<double> &du_dt){
+    void compute_rhs( double nu, double Lx, const vector <double> &kx, fftw_complex *u_hat, vector<double> &du_dt){
     int N = kx.size();
  
     /// Diffusion term: (d²u/dx²)
@@ -144,9 +184,9 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
         // Create IFFT plan for diffusion term (d²u/dx²)
         fftw_plan ifft_plan_diffusion = fftw_plan_dft_c2r_1d(N, ddu_hat_ddx, ddu_ddx.data(), FFTW_ESTIMATE);
         // Compute second derivative in Fourier space (k^2 * u_hat)
-        for (int i{0}; i < N; ++i) {
+        for (int i{0}; i < N; ++i){
             ddu_hat_ddx[i][0] = pow(kx[i], 2) * u_hat[i][0];  // Real part
-            ddu_hat_ddx[i][1] = pow(kx[i], 2) * u_hat[i][1];
+            ddu_hat_ddx[i][1] = pow(kx[i], 2) * u_hat[i][1];  // Imaginary part
         }
         // Execute inverse FFT for diffusion term (d²u/dx²)
         fftw_execute(ifft_plan_diffusion);
@@ -161,19 +201,19 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
         // Create IFFT plan nonlinear-advection term (u.(du/dx))
         fftw_plan ifft_plan_nonlinear_advection = fftw_plan_dft_c2r_1d(N, nonlinear_advection_hat, nonlinear_advection.data(), FFTW_ESTIMATE);
         // Compute nonlinear-advection term using AntiAlias function
-        for (int i = 0; i < N; ++i) {
-            nonlinear_advection_hat[i] = compute_AntiAlias(Lx, u_hat );
+        AntiAlias_ZeroPadding(Lx, u_hat, N );
+        for (int i = 0; i < N; ++i){
+            nonlinear_advection_hat[i][0] = u_hat[i][0];  // Real part
+            nonlinear_advection_hat[i][1] = u_hat[i][1];  // Imaginary part
         }
         // Execute inverse FFT for nonlinear-advection term (u.(du/dx))
         fftw_execute(ifft_plan_nonlinear_advection);
         // Normalize the IFFT results
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < N; ++i) 
             nonlinear_advection[i] /= N;
-        }
     /// Total RHS term
-        for (int i = 0; i < N; ++i) {
-            du_dt[i] = Nonlinear_advection[i] - nu*ddu_ddx[i];
-        }
+        for (int i = 0; i < N; ++i) 
+            du_dt[i] = nonlinear_advection[i] - nu*ddu_ddx[i];
         
     fftw_destroy_plan(ifft_plan_diffusion);
     fftw_destroy_plan(ifft_plan_nonlinear_advection);
@@ -181,13 +221,14 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
     fftw_free(nonlinear_advection_hat);
 }
 
-//// Anti Aliasing: compute_AntiAlias(u_hat,Lx)     
-    void AntiAlias_ZeroPadding(double Lx, vector<fftw_complex>& u_hat) {
-    int N = u_hat.size();
+//// Anti Aliasing: compute_AntiAlias(u_hat,Lx) 
+    void AntiAlias_ZeroPadding(double Lx, fftw_complex* u_hat, int N) {
     int M = (3 * N) / 2; // 3/2 Rule
 
     // Step 1: Zero-padding in Fourier space
-    vector<fftw_complex> u_hat_pad(M, {0.0, 0.0});
+    fftw_complex *u_hat_pad = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * M);
+    fftw_complex* w_pad = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * M);
+    memset(u_hat_pad, 0, sizeof(fftw_complex) * M);
     for (int i = 0; i < N / 2; ++i) {
         u_hat_pad[i][0] = u_hat[i][0];   
         u_hat_pad[i][1] = u_hat[i][1];   
@@ -196,9 +237,10 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
     }
 
     // Step 2: Perform IFFT to go to physical space
-    vector<fftw_complex> w_pad(M);
-    fftw_plan ifft_plan = fftw_plan_dft_1d(M, u_hat_pad.data(), w_pad.data(), FFTW_BACKWARD, FFTW_ESTIMATE);
+   // vector<fftw_complex> w_pad(M);
+    fftw_plan ifft_plan = fftw_plan_dft_1d(M, u_hat_pad, w_pad, FFTW_BACKWARD, FFTW_ESTIMATE);
     fftw_execute(ifft_plan);
+    fftw_free(u_hat_pad);
     fftw_destroy_plan(ifft_plan);
 
     // Normalize IFFT
@@ -228,6 +270,7 @@ cout << "Elapsed time for the time-stepping loop: " << duration.count() << " ms"
 
     // Step 6: Transform back to Fourier space
     fftw_plan fft_plan = fftw_plan_dft_1d(M, nonlinear_term_extended.data(), nonlinear_term_extended.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_free(w_pad);
     fftw_execute(fft_plan);
     fftw_destroy_plan(fft_plan);
 
