@@ -1,4 +1,5 @@
 # ForcedBurgersTurbulence_1D
+![untitled01](https://github.com/user-attachments/assets/3604d7db-33d7-49e3-922e-61e710b92dae)
 ## Overview
 This repository contains a C++ implementation of a spectral method for solving the Forced Burgers’ Equation using Fourier-Galerkin discretization and FFTW for efficient spectral transforms. The code is optimized for high-performance computing with efficient memory management.
 ### Equation Formulation
