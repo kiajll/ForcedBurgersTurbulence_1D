@@ -12,6 +12,8 @@ where:
 * $\nu$: Kinematic viscosity coefficient,
 * $f(x,t)$: External forcing term.
 This equation is solved in a periodic domain $x \in [0,L]$ , using spectral methods.
+### Forcing term
+We injected a large-scale forcing term $f(x,t)$ into the system that is Gaussian white-in-time and acts on the wavenumber range $k\in [1,3]$.
 ## Numerical Methods
 This code uses spectral Fourier-Galerkin methods, which leverage Fast Fourier Transforms (FFTs) for spatial differentiation:
 * Pseudo-spectral method for computing nonlinear terms.
