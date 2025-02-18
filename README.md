@@ -17,11 +17,21 @@ This code uses spectral Fourier-Galerkin methods, which leverage Fast Fourier Tr
 * Explicit time integration using a third-order Runge-Kutta scheme.
 * Anti-aliasing via the 3/2-rule to reduce energy pile-up at high wavenumbers.
 * FFTW for efficient Fourier transforms.
-### Fourier Discretization
+### 1. Fourier Discretization
 The velocity field is represented in Fourier space as:
 
-$$ u\left(x\right) = \sum_{k}{u_k(t)e^{ikx}} $$
+$$ u\left(x\right) = \sum_{k}{\hat{u}_k(t)e^{ikx}} $$
 
+where:
+* $\hat{u}_k$ are Fourier coefficients,
+* $k$ are wavenumbers in a periodic domain.
+
+Spatial derivatives are computed as:
+
+$$\frac{\partial u}{\partial x} \rightarrow ik \hat{u}_k$$
+$$\frac{\partial^2u}{\partial x^2} \rightarrow -k^2\hat{u}_k$$
+
+### 2. Time Integration (Explicit compact RK3)
 
 ### 📜 License
 This project is licensed under the MIT License - see the [main.cpp](main.cpp) file for details.
