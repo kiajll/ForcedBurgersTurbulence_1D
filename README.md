@@ -70,7 +70,7 @@ FFTW `fftw3.h` is used for spectral transforms, including:
 ## Installation & Compilation
 ### Requirements
 * FFTW3: Install FFTW library (`fftw3.h` must be accessible).
-* C++ Compiler: GCC, Clang, or MSVC with C++17+ support.
+* C++ Compiler: GCC, Clang, or MSVC with C++17 support.
 
 
 ### 📜 License
